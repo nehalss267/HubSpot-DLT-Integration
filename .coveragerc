@@ -1,0 +1,7 @@
+[run]
+source = api
+omit =
+    api/migrations/*
+
+[report]
+show_missing = True

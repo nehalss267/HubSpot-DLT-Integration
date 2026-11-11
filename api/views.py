@@ -29,6 +29,7 @@ from .services import (
     HubSpotAPIError,
     HubSpotDealsService,
     InvalidTokenError,
+    RateLimitError,
     start_extraction_async,
     token_fingerprint,
 )
@@ -169,7 +170,7 @@ class ScanStartView(APIView):
                     {'error': str(exc)},
                     status=status.HTTP_401_UNAUTHORIZED,
                 )
-            except HubSpotAPIError as exc:
+            except (HubSpotAPIError, RateLimitError) as exc:
                 return Response(
                     {'error': f'Unable to validate API token: {exc}'},
                     status=status.HTTP_502_BAD_GATEWAY,
