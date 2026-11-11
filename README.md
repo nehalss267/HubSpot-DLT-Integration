@@ -150,18 +150,51 @@ python manage.py createsuperuser
 
 ## Tests
 
-```bash
-python manage.py test
-```
-
-The test suite covers seeded job data, pagination, statistics, job state
-changes, invalid input, invalid job IDs, upstream failures, and rate limiting.
-
-The live HubSpot test is skipped unless a token is provided:
+Run the full test suite:
 
 ```bash
-HUBSPOT_TEST_TOKEN=pat-na1-your-token python manage.py test api.tests.RealExtractionTests
+pytest
 ```
+
+Or with coverage:
+
+```bash
+pytest --cov=api --cov-report=term-missing
+```
+
+### Quality gates
+
+The `pytest.ini` configures the following quality gates:
+
+- **Coverage**: `--cov=api` with `tests/htmlcov/` output
+- **Fail on warnings**: all `DeprecationWarning` / `PendingDeprecationWarning` are treated as errors
+- **Marker set**: `unit / integration / contract / workflow / resilience / security / e2e`
+
+### Test structure
+
+The test suite is organised in three layers:
+
+| Layer | Scope | Command |
+|-------|-------|---------|
+| Unit | Isolated business logic, serializers, extraction runner, job state machine | `pytest tests/unit -q --no-cov` |
+| Integration | Endpoint-level tests against the database | `pytest tests/integration -q --no-cov` |
+| Contract | Request/response schema contracts (JSON key sets, types, pagination) | `pytest tests/contract -q --no-cov` |
+
+Full suite (all layers):
+
+```bash
+pytest tests/ -q --no-cov
+```
+
+### Live HubSpot extraction tests
+
+The e2e tests require a real HubSpot access token:
+
+```bash
+HUBSPOT_TEST_TOKEN=pat-na1-your-token pytest tests/e2e -q --no-cov
+```
+
+These tests follow the full extraction lifecycle (start → poll status → fetch results → cancel/remove) and are gated behind the `HUBSPOT_TEST_TOKEN` environment variable.
 
 ## Project layout
 
@@ -172,13 +205,13 @@ api/                  API application
   admin.py            Admin registrations
   models.py           ExtractionJob and ExtractedRecord
   serializers.py      Request and response serializers
-  tests.py            Test suite
+  tests.py            Legacy test suite (migrated to new suite)
   urls.py             API routes
   views.py            API views
 core/                 Django project settings and root URLs
 docs/                 API documentation
 manage.py             Django entry point
-requirements.txt      Python dependencies
+requirements.txt      Python dependencies 
 .env.example          Environment variable template
 ```
 
@@ -190,4 +223,6 @@ requirements.txt      Python dependencies
 4. Use PostgreSQL instead of SQLite.
 5. Run `python manage.py collectstatic`.
 6. Run under Gunicorn or another WSGI server.
-7. Use a task queue such as Celery or RQ for extraction jobs.
+7. Use a task queue such as Celery or RQ for extraction jobs (the current
+   implementation runs jobs in background threads; swap `start_extraction_async`
+   for a Celery task for production).
