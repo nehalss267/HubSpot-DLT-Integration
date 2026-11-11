@@ -196,6 +196,31 @@ HUBSPOT_TEST_TOKEN=pat-na1-your-token pytest tests/e2e -q --no-cov
 
 These tests follow the full extraction lifecycle (start → poll status → fetch results → cancel/remove) and are gated behind the `HUBSPOT_TEST_TOKEN` environment variable.
 
+### Security testing
+
+The test suite includes security tests that verify authentication,
+authorization, and tenant isolation. By default the API uses `AllowAny`
+for development convenience. To enable production-grade security, update
+`core/settings.py` 
+
+```python
+REST_FRAMEWORK = {
+    'DEFAULT_PERMISSION_CLASSES': [
+        'rest_framework.permissions.IsAuthenticated',
+    ],
+    'DEFAULT_AUTHENTICATION_CLASSES': [
+        'rest_framework.authentication.TokenAuthentication',
+    ],
+}
+```
+
+Then run the security tests:
+
+```bash
+pytest tests/security/ tests/authorization/ tests/tenant_isolation/ -q --no-cov
+```
+
+
 ## Project layout
 
 ```text
@@ -205,7 +230,6 @@ api/                  API application
   admin.py            Admin registrations
   models.py           ExtractionJob and ExtractedRecord
   serializers.py      Request and response serializers
-  tests.py            Legacy test suite (migrated to new suite)
   urls.py             API routes
   views.py            API views
 core/                 Django project settings and root URLs
@@ -221,7 +245,7 @@ requirements.txt      Python dependencies
 2. Set a new `SECRET_KEY`.
 3. Set `ALLOWED_HOSTS` to the deployed domain.
 4. Use PostgreSQL instead of SQLite.
-5. Run `python manage.py collectstatic`.
+5. Run `python manage.py collectstatic` and serve static files.
 6. Run under Gunicorn or another WSGI server.
 7. Use a task queue such as Celery or RQ for extraction jobs (the current
    implementation runs jobs in background threads; swap `start_extraction_async`

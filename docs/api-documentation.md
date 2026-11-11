@@ -1,4 +1,8 @@
-# API Reference and Swagger Setup
+# API Reference
+
+Django REST API for extracting HubSpot deals. The service runs extraction jobs
+in the background and exposes endpoints to start, monitor, cancel, and remove
+jobs. Swagger UI and ReDoc are available for interactive documentation.
 
 ## Base URLs
 
@@ -10,13 +14,6 @@
 
 ## Job statuses
 
-```text
-pending -> in_progress -> completed
-pending -> in_progress -> failed
-pending -> in_progress -> cancelled
-pending -> cancelled
-```
-
 | Status | Meaning |
 |--------|---------|
 | `pending` | Job created, not started |
@@ -25,160 +22,26 @@ pending -> cancelled
 | `failed` | Extraction failed; read `error_message` |
 | `cancelled` | Job cancelled by the client |
 
-## Swagger setup
+Transition table (per job state machine):
 
-### Dependencies
-
-`requirements.txt` contains:
-
-```text
-Django==5.2.18
-djangorestframework==3.18.3
-drf-yasg==1.21.18
-```
-
-Install with:
-
-```bash
-pip install -r requirements.txt
-```
-
-### Applications
-
-`core/settings.py` registers DRF and drf-yasg:
-
-```python
-INSTALLED_APPS = [
-    'django.contrib.admin',
-    'django.contrib.auth',
-    'django.contrib.contenttypes',
-    'django.contrib.sessions',
-    'django.contrib.messages',
-    'django.contrib.staticfiles',
-    'rest_framework',
-    'drf_yasg',
-    'api',
-]
-```
-
-DRF settings used by the project:
-
-```python
-REST_FRAMEWORK = {
-    'DEFAULT_PERMISSION_CLASSES': [
-        'rest_framework.permissions.AllowAny',
-    ],
-    'DEFAULT_PAGINATION_CLASS': 'rest_framework.pagination.PageNumberPagination',
-    'PAGE_SIZE': 10,
-    'DEFAULT_RENDERER_CLASSES': [
-        'rest_framework.renderers.JSONRenderer',
-        'rest_framework.renderers.BrowsableAPIRenderer',
-    ],
-}
-```
-
-Swagger UI settings:
-
-```python
-SWAGGER_SETTINGS = {
-    'USE_SESSION_AUTH': False,
-    'DOC_EXPANSION': 'none',
-    'DEFAULT_MODEL_RENDERING': 'example',
-    'VALIDATOR_URL': None,
-    'TAGS_SORTER': 'alpha',
-    'OPERATIONS_SORTER': 'alpha',
-}
-```
-
-### Schema view
-
-`core/urls.py` builds the schema and serves it in several formats:
-
-```python
-from drf_yasg import openapi
-from drf_yasg.renderers import SwaggerJSONRenderer, SwaggerYAMLRenderer
-from drf_yasg.views import get_schema_view
-from rest_framework import permissions
-
-schema_view = get_schema_view(
-    openapi.Info(
-        title="Backend Project API",
-        default_version='v1',
-        description="API documentation for the Backend Project.",
-        contact=openapi.Contact(email="contact@example.com"),
-        license=openapi.License(name="BSD License"),
-    ),
-    public=True,
-    permission_classes=(permissions.AllowAny,),
-)
-```
-
-Documentation routes:
-
-| URL | Content |
-|-----|---------|
-| `http://localhost:8000/docs/` | Swagger UI |
-| `http://localhost:8000/swagger/` | Swagger UI alias |
-| `http://localhost:8000/redoc/` | ReDoc |
-| `http://localhost:8000/swagger.json` | OpenAPI 2.0 schema as JSON |
-| `http://localhost:8000/swagger.yaml` | OpenAPI 2.0 schema as YAML |
-| `http://localhost:8000/` | Swagger UI |
-
-The UI views use `cache_timeout=0`, so schema changes are visible without a
-server restart.
-
-### Annotations
-
-Endpoints use `swagger_auto_schema` for tags, summaries, request bodies,
-parameters, and response codes:
-
-```python
-@swagger_auto_schema(
-    tags=['Extraction'],
-    operation_summary='Start a new extraction job',
-    request_body=ScanStartSerializer,
-    responses={
-        202: JobStatusSerializer,
-        400: ErrorSerializer,
-        401: ErrorSerializer,
-        409: ErrorSerializer,
-        502: ErrorSerializer,
-    },
-)
-def post(self, request):
-    ...
-```
-
-Tags used in the schema:
-
-| Tag | Endpoints |
-|-----|-----------|
-| `Health` | `/api/v1/health`, `/api/health/`, `/api/health/ping/` |
-| `Extraction` | `/api/v1/scan/*` |
-| `Jobs` | `/api/v1/jobs/*` |
-| `Users` | `/api/users/*` |
-
-### Run locally
-
-```bash
-python manage.py migrate
-python manage.py runserver
-```
-
-Open `http://localhost:8000/docs/`.
+| From → Outcome | To |
+|----------------|-----|
+| `pending` → success | `in_progress` → then `completed` |
+| `pending` → failure | `in_progress` → then `failed` |
+| `in_progress` → success | `completed` |
+| `in_progress` → failure | `failed` |
 
 ## Authentication
 
-The Swagger UI and schema endpoints are public. The service itself does not
-require a token, but the extraction start endpoint requires a HubSpot private
-app access token.
+The Swagger UI and schema endpoints are public. The extraction start endpoint
+requires a HubSpot private app access token.
 
 Send the token in one of two places:
 
 1. JSON field `api_token`
 2. Header `X-API-Token`
 
-Token rules:
+Token requirements:
 
 - At least 20 characters
 - Letters, numbers, `.`, `_`, and `-` only
@@ -187,9 +50,6 @@ Token rules:
 With `HUBSPOT_VALIDATE_TOKEN_ON_START=True` (the default), the token is checked
 against HubSpot before the job is created. A rejected token returns `401`. A
 HubSpot connection or API error during validation returns `502`.
-
-The project currently uses `AllowAny` on all endpoints. Add authentication and
-permissions before exposing the API outside a development environment.
 
 ## Endpoints
 
@@ -448,8 +308,7 @@ Response `200 OK`:
 }
 ```
 
-`average_extraction_time_seconds` is `null` when no completed job has timing
-data.
+`average_extraction_time_seconds` is `null` when no completed job has timing data.
 
 ### Example endpoints
 
@@ -486,12 +345,12 @@ data.
 
 Default deal properties:
 
-```text
+```
 dealname, amount, dealstage, pipeline, closedate, dealtype, description,
 hubspot_owner_id, createdate, hs_lastmodifieddate
 ```
 
-### Errors
+## Errors
 
 Error responses use this shape:
 
@@ -534,12 +393,12 @@ repeat:
 
 The HubSpot service:
 
-- Sends `Authorization: Bearer <token>` on every request.
-- Retries `429` responses using the `Retry-After` header.
-- Retries network failures with exponential backoff.
-- Raises `RateLimitError` after `HUBSPOT_MAX_RETRIES` attempts.
-- Raises `InvalidTokenError` on `401` and `403`.
-- Sets the job to `failed` and stores the error if extraction cannot finish.
+- Sends `Authorization: Bearer <token>` on every request
+- Retries `429` responses using the `Retry-After` header
+- Retries network failures with exponential backoff
+- Raises `RateLimitError` after `HUBSPOT_MAX_RETRIES` attempts
+- Raises `InvalidTokenError` on `401` and `403`
+- Sets the job to `failed` and stores the error if extraction cannot finish
 
 | Setting | Default | Description |
 |---------|---------|-------------|
@@ -551,37 +410,40 @@ The HubSpot service:
 
 ## Tests
 
-Run all tests:
+### Quality gates
+
+The `pytest.ini` configures the following quality gates:
+
+- **Coverage**: `--cov=api` with `htmlcov/` output
+- **Fail on warnings**: all `DeprecationWarning` / `PendingDeprecationWarning` are treated as errors
+- **Marker set**: `unit / integration / contract / workflow / resilience / security / e2e`
+
+### Test structure
+
+The test suite is organised in three layers:
+
+| Layer | Scope | Command |
+|-------|-------|---------|
+| Unit | Isolated business logic, serializers, extraction runner, job state machine | `pytest tests/unit -q --no-cov` |
+| Integration | Endpoint-level tests against the database | `pytest tests/integration -q --no-cov` |
+| Contract | Request/response schema contracts (JSON key sets, types, pagination) | `pytest tests/contract -q --no-cov` |
+
+Full suite (all layers):
 
 ```bash
-python manage.py test
+pytest tests/ -q --no-cov
 ```
 
-Run the live extraction test with a private app token:
+### Live HubSpot extraction tests
+
+The e2e tests require a real HubSpot access token:
 
 ```bash
-HUBSPOT_TEST_TOKEN=pat-na1-your-token python manage.py test api.tests.RealExtractionTests
+HUBSPOT_TEST_TOKEN=pat-na1-your-token pytest tests/e2e -q --no-cov
 ```
 
-Check schema generation:
+These tests follow the full extraction lifecycle (start → poll status → fetch results → cancel/remove) and are gated behind the `HUBSPOT_TEST_TOKEN` environment variable.
 
-```bash
-python manage.py shell -c "from django.conf import settings; settings.ALLOWED_HOSTS=['testserver']; from django.test import Client; c=Client(); print(c.get('/swagger.json').status_code)"
-```
-
-## Troubleshooting
-
-| Problem | Check |
-|---------|-------|
-| `/docs/` returns `404` | `drf_yasg` is installed and `core.urls` is the root URLconf |
-| Swagger UI has no endpoints | `path('api/', include('api.urls'))` exists |
-| Schema request fails | Serializer fields and `swagger_auto_schema` types |
-| Start returns `400` | Token format and JSON body |
-| Start returns `401` | Token is valid and has `crm.objects.deals.read` |
-| Start returns `409` | An active job exists for the same token |
-| Job stays `pending` or `in_progress` | Service logs and background thread state |
-| Job is `failed` | `error_message` in the status response |
-| `DisallowedHost` | Add the host to `ALLOWED_HOSTS` |
 
 ## Production changes
 
