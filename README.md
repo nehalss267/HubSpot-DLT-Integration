@@ -1,4 +1,4 @@
-# Backend Project
+# HubSpot-DLT-Integration
 
 Django REST API for extracting HubSpot deals. The service runs extraction jobs
 in the background and exposes endpoints to start, monitor, cancel, and remove
@@ -15,8 +15,8 @@ jobs. Swagger UI and ReDoc are available for interactive documentation.
 Clone the repository:
 
 ```bash
-git clone https://github.com/nehalss267/NehalSolanki_BackendFinalAssesement.git
-cd NehalSolanki_BackendFinalAssesement
+git clone https://github.com/nehalss267/HubSpot-DLT-Integration.git
+cd HubSpot-DLT-Integration
 ```
 
 Create and activate a virtual environment.
